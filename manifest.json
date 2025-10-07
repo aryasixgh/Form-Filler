@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Google Forms AutoFill",
+  "version": "1.0",
+  "description": "Fills repetitive information on Google Forms automatically.",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AutoFill Form"
+  }
+}
