@@ -1,8 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Form Autofill Helper",
+  "name": "Google Form Autofiller",
   "version": "1.0",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "description": "Automatically fill Google Forms with saved data",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["https://docs.google.com/forms/*"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -12,7 +14,7 @@
   "content_scripts": [
     {
       "matches": ["https://docs.google.com/forms/*"],
-      "js": ["popup.js"]
+      "js": ["content.js"]
     }
   ]
 }
