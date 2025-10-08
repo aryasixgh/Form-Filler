@@ -1,72 +1,54 @@
-// popup.js
+const scanBtn = document.getElementById("scanFields");
+const fillBtn = document.getElementById("fillFields");
+const mappingInput = document.getElementById("mappingInput");
 
-const formContainer = document.getElementById("fields");
-const scanBtn = document.getElementById("scan");
-const saveBtn = document.getElementById("save");
-const autofillBtn = document.getElementById("autofill");
-
-// Load saved mapping on startup
-chrome.storage.local.get(["formMapping"], (res) => {
-  if (res.formMapping) {
-    populateForm(res.formMapping);
-  }
-});
-
-function populateForm(mapping) {
-  formContainer.innerHTML = "";
-  for (const key in mapping) {
-    addField(key, mapping[key]);
-  }
-}
-
-function addField(label, value = "") {
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = `
-    <label>${label}</label>
-    <input type="text" value="${value}" data-label="${label}">
-  `;
-  formContainer.appendChild(wrapper);
-}
-
+// Scan fields on current tab
 scanBtn.addEventListener("click", async () => {
-  console.log("Scanning fields...");
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  chrome.tabs.sendMessage(tab.id, { action: "getFields" }, (res) => {
+  chrome.tabs.sendMessage(tab.id, { action: "scanFields" }, (response) => {
     if (chrome.runtime.lastError) {
       console.error("Error:", chrome.runtime.lastError.message);
       alert(
-        "Could not connect to content script. Try reloading the form page."
+        "❌ Could not communicate with the page. Make sure a Google Form is open."
       );
       return;
     }
 
-    if (res && res.fields && res.fields.length > 0) {
-      console.log("Fields found:", res.fields);
-      formContainer.innerHTML = "";
-      res.fields.forEach((f) => addField(f.label));
+    if (response && response.fields && response.fields.length > 0) {
+      const mapping = {};
+      response.fields.forEach((f) => (mapping[f.label] = ""));
+      mappingInput.value = JSON.stringify(mapping, null, 2);
     } else {
-      console.warn("No fields detected or empty response:", res);
-      alert("No fields detected on this page.");
+      alert("No fields detected!");
     }
   });
 });
 
-saveBtn.addEventListener("click", () => {
-  const mapping = {};
-  document.querySelectorAll("input[data-label]").forEach((input) => {
-    mapping[input.dataset.label] = input.value;
-  });
-  chrome.storage.local.set({ formMapping: mapping }, () => {
-    alert("Mapping saved!");
-  });
-});
+// Fill fields using mapping from textarea
+fillBtn.addEventListener("click", async () => {
+  let mapping;
+  try {
+    mapping = JSON.parse(mappingInput.value);
+  } catch (e) {
+    alert("Invalid JSON format");
+    return;
+  }
 
-autofillBtn.addEventListener("click", async () => {
-  const mapping = {};
-  document.querySelectorAll("input[data-label]").forEach((input) => {
-    mapping[input.dataset.label] = input.value;
-  });
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  chrome.tabs.sendMessage(tab.id, { action: "autofill", mapping });
+  chrome.tabs.sendMessage(
+    tab.id,
+    { action: "fillFields", mapping },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        console.error("Error:", chrome.runtime.lastError.message);
+        alert(
+          "❌ Could not send data to page. Make sure a Google Form is open."
+        );
+        return;
+      }
+
+      if (response && response.success) alert("✅ Fields filled successfully!");
+    }
+  );
 });

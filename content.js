@@ -1,14 +1,18 @@
-// content.js
+// Helper to normalize text
+function normalizeText(str) {
+  return str.replace(/\s+/g, " ").trim().toLowerCase();
+}
 
-function getAllFormFields() {
+// Scan all fields in Google Form
+function scanFormFields() {
+  const questions = document.querySelectorAll('div[role="listitem"]');
   const fields = [];
 
-  // Each question block
-  const questions = document.querySelectorAll('div[role="listitem"]');
-
   questions.forEach((q) => {
-    const labelElem = q.querySelector('div[role="heading"]');
-    const label = labelElem?.innerText.trim();
+    let labelElem =
+      q.querySelector('div[role="heading"] span') ||
+      q.querySelector('div[role="heading"]');
+    const label = labelElem ? labelElem.innerText.trim() : "Unnamed Field";
 
     const input = q.querySelector(
       'input[type="text"], input[type="email"], input[type="number"]'
@@ -17,17 +21,12 @@ function getAllFormFields() {
     const radios = q.querySelectorAll('div[role="radio"]');
     const checkboxes = q.querySelectorAll('div[role="checkbox"]');
 
-    if (
-      label &&
-      (input || textarea || radios.length > 0 || checkboxes.length > 0)
-    ) {
-      const type = input
-        ? "text"
-        : textarea
-        ? "textarea"
-        : radios.length
-        ? "radio"
-        : "checkbox";
+    if (input || textarea || radios.length || checkboxes.length) {
+      let type = "text";
+      if (textarea) type = "textarea";
+      else if (radios.length) type = "radio";
+      else if (checkboxes.length) type = "checkbox";
+
       fields.push({ label, type });
     }
   });
@@ -36,60 +35,68 @@ function getAllFormFields() {
   return fields;
 }
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === "getFields") {
-    const fields = getAllFormFields();
-    sendResponse({ fields });
-  }
+// Fill fields using mapping
+function fillFormFields(mapping) {
+  const questions = document.querySelectorAll('div[role="listitem"]');
 
-  if (msg.action === "autofill") {
-    const mapping = msg.mapping;
-    console.log("Autofilling with mapping:", mapping);
+  questions.forEach((q) => {
+    let labelElem =
+      q.querySelector('div[role="heading"] span') ||
+      q.querySelector('div[role="heading"]');
+    const label = labelElem ? labelElem.innerText.trim() : null;
+    if (!label || !(label in mapping)) return;
 
-    const questions = document.querySelectorAll('div[role="listitem"]');
-    questions.forEach((q) => {
-      const labelElem = q.querySelector('div[role="heading"]');
-      const label = labelElem?.innerText.trim();
-      const value = mapping[label];
-      if (!value) return;
+    const value = mapping[label];
 
-      const input = q.querySelector(
-        'input[type="text"], input[type="email"], input[type="number"]'
-      );
-      const textarea = q.querySelector("textarea");
+    // Text / textarea
+    const input = q.querySelector(
+      'input[type="text"], input[type="email"], input[type="number"]'
+    );
+    const textarea = q.querySelector("textarea");
+    if (input) {
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    if (textarea) {
+      textarea.value = value;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    }
 
-      if (input) {
-        input.focus();
-        input.value = value;
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-
-      if (textarea) {
-        textarea.focus();
-        textarea.value = value;
-        textarea.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-
-      const radios = q.querySelectorAll('div[role="radio"]');
-      if (radios.length > 0) {
-        const match = Array.from(radios).find(
-          (r) => r.innerText.trim().toLowerCase() === value.toLowerCase()
-        );
-        if (match) match.click();
-      }
-
-      const checkboxes = q.querySelectorAll('div[role="checkbox"]');
-      if (checkboxes.length > 0) {
-        const values = Array.isArray(value) ? value : [value];
-        values.forEach((v) => {
-          const match = Array.from(checkboxes).find(
-            (c) => c.innerText.trim().toLowerCase() === v.toLowerCase()
-          );
-          if (match) match.click();
-        });
+    // Radio buttons
+    const radios = q.querySelectorAll('div[role="radio"]');
+    radios.forEach((r) => {
+      const optionText = normalizeText(r.innerText);
+      if (optionText === normalizeText(value)) {
+        r.click();
+        r.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        r.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+        r.dispatchEvent(new Event("change", { bubbles: true }));
       }
     });
-  }
 
-  return true;
+    // Checkboxes (comma-separated)
+    const checkboxes = q.querySelectorAll('div[role="checkbox"]');
+    if (checkboxes.length) {
+      const values = value.split(",").map((v) => normalizeText(v));
+      checkboxes.forEach((c) => {
+        const optionText = normalizeText(c.innerText);
+        if (values.includes(optionText)) {
+          c.click();
+          c.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+          c.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+          c.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      });
+    }
+  });
+}
+
+// Listen to messages from popup.js
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === "scanFields") sendResponse({ fields: scanFormFields() });
+  if (msg.action === "fillFields") {
+    fillFormFields(msg.mapping);
+    sendResponse({ success: true });
+  }
+  return true; // Keep port open for async
 });
