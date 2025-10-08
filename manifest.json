@@ -1,11 +1,18 @@
 {
   "manifest_version": 3,
-  "name": "Google Forms AutoFill",
+  "name": "Form Autofill Helper",
   "version": "1.0",
-  "description": "Fills repetitive information on Google Forms automatically.",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["storage", "activeTab", "scripting"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "AutoFill Form"
-  }
+    "default_icon": {
+      "16": "icon.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://docs.google.com/forms/*"],
+      "js": ["popup.js"]
+    }
+  ]
 }
